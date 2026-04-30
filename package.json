@@ -2,7 +2,14 @@
   "name": "nestjs-cloudinary-community",
   "version": "0.2.0",
   "description": "Unofficial, community-maintained NestJS module for the Cloudinary service. Not affiliated with Cloudinary Ltd.",
-  "author": "francoabottaro",
+  "author": {
+    "name": "francoabottaro",
+    "url": "https://francobottaro.vercel.app/"
+  },
+  "funding": {
+    "type": "url",
+    "url": "https://francobottaro.vercel.app/"
+  },
   "contributors": [],
   "private": false,
   "license": "MIT",
@@ -16,13 +23,13 @@
     "image-upload",
     "module"
   ],
-  "homepage": "https://github.com/<your-username>/nestjs-cloudinary-community",
+  "homepage": "https://github.com/francoabottaro/nestjs-cloudinary-community",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/<your-username>/nestjs-cloudinary-community.git"
+    "url": "git+https://github.com/francoabottaro/nestjs-cloudinary-community.git"
   },
   "bugs": {
-    "url": "https://github.com/<your-username>/nestjs-cloudinary-community/issues"
+    "url": "https://github.com/francoabottaro/nestjs-cloudinary-community/issues"
   },
   "publishConfig": {
     "access": "public",
