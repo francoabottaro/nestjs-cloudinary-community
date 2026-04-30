@@ -9,16 +9,16 @@ import {
 import {
   CLOUDINARY_CLIENT,
   CLOUDINARY_OPTIONS,
-} from './utils/const/cloudinary.constants';
-import type { CloudinaryModuleOptions } from './utils/interface/cloudinary-options.interface';
-import type { CloudinaryServiceContract } from './utils/interface/cloudinary-service.contract';
+} from './const/cloudinary.constants';
+import type { CloudinaryModuleOptions } from './interface/cloudinary-options.interface';
+import type { CloudinaryServiceContract } from './interface/cloudinary-service.contract';
 import type {
   CloudinaryDeleteFolderResult,
   CloudinaryDeleteResult,
   CloudinaryError,
   CloudinaryFolder,
   CloudinaryUploadSuccess,
-} from './utils/interface/cloudinary-models.interface';
+} from './interface/cloudinary-models.interface';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
 
@@ -28,11 +28,15 @@ export type {
   CloudinaryError,
   CloudinaryFolder,
   CloudinaryUploadSuccess,
-} from './utils/interface/cloudinary-models.interface';
+} from './interface/cloudinary-models.interface';
 
 function settledReasonMessage(reason: unknown): string {
   if (reason instanceof Error) return reason.message;
   return 'Unknown error';
+}
+
+interface DeleteFolderOptions {
+  save_deleted: boolean;
 }
 
 @Injectable()
@@ -295,7 +299,15 @@ export class CloudinaryService implements CloudinaryServiceContract {
    * Deletes all assets under `path`, then removes the empty folder.
    * If `delete_folder` fails (e.g. non-empty subfolders), returns `folderRemoved: false` with `reason`.
    */
-  async deleteFolder(path: string): Promise<CloudinaryDeleteFolderResult> {
+  async deleteFolder(
+    path: string,
+    options: DeleteFolderOptions,
+  ): Promise<CloudinaryDeleteFolderResult> {
+    if (!options.save_deleted) {
+      throw new BadRequestException(
+        'security error: save_deleted is required to save deleted assets.',
+      );
+    }
     const p = this.#requireNonEmptyPath(path, 'folder path');
     let assetsDeleted = 0;
     try {

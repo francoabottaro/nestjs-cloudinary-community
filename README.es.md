@@ -249,11 +249,13 @@ const { assetsDeleted } = await this.cloudinary.deleteByFolder('my-prefix');
 
 ### `deleteFolder(path)`
 
-Purga por prefijo (`delete_resources_by_prefix` paginado) y luego `delete_folder`. Si la API de carpeta falla tras la purga:
+Purga por prefijo (`delete_resources_by_prefix` paginado) y luego `delete_folder`.
+
+**Nota de seguridad:** este método requiere `{ save_deleted: true }` como opt-in explícito. Ayuda a evitar borrados destructivos accidentales forzando al caller a reconocer que los recursos borrados deben guardarse (Admin API de Cloudinary `save_deleted`).
 
 ```typescript
 const { assetsDeleted, folderRemoved, reason } =
-  await this.cloudinary.deleteFolder('myfolder');
+  await this.cloudinary.deleteFolder('myfolder', { save_deleted: true });
 // folderRemoved === false → revisar reason
 ```
 

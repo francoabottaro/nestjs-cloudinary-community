@@ -4,12 +4,12 @@ import { CloudinaryService } from './cloudinary.service';
 import {
   CLOUDINARY_CLIENT,
   CLOUDINARY_OPTIONS,
-} from './utils/const/cloudinary.constants';
+} from './const/cloudinary.constants';
 import type {
   CloudinaryModuleAsyncOptions,
   CloudinaryModuleOptions,
   CloudinaryOptionsFactory,
-} from './utils/interface/cloudinary-options.interface';
+} from './interface/cloudinary-options.interface';
 
 function assertOptions(opts: CloudinaryModuleOptions): void {
   if (!opts?.cloud_name || !opts?.api_key || !opts?.api_secret) {

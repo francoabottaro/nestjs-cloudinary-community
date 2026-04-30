@@ -249,11 +249,13 @@ const { assetsDeleted } = await this.cloudinary.deleteByFolder('my-prefix');
 
 ### `deleteFolder(path)`
 
-Purges by prefix (paginated `delete_resources_by_prefix`), then calls `delete_folder`. If the folder API fails after purge:
+Purges by prefix (paginated `delete_resources_by_prefix`), then calls `delete_folder`.
+
+**Security note:** this method requires `{ save_deleted: true }` as an explicit opt-in. It helps prevent accidental destructive deletes by making the caller acknowledge that deleted assets must be saved (Cloudinary Admin API `save_deleted`).
 
 ```typescript
 const { assetsDeleted, folderRemoved, reason } =
-  await this.cloudinary.deleteFolder('myfolder');
+  await this.cloudinary.deleteFolder('myfolder', { save_deleted: true });
 // folderRemoved === false → check reason
 ```
 

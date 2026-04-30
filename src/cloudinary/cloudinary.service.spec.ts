@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import type { CloudinaryServiceContract } from './utils/interface/cloudinary-service.contract';
+import type { CloudinaryServiceContract } from './interface/cloudinary-service.contract';
 import { CloudinaryModule } from './cloudinary.module';
 import { CloudinaryService } from './cloudinary.service';
 
@@ -541,7 +541,9 @@ describe('CloudinaryService', () => {
       });
       cloudinaryMocks.deleteFolder.mockResolvedValue({});
 
-      const out = await service.deleteFolder('myfolder');
+      const out = await service.deleteFolder('myfolder', {
+        save_deleted: true,
+      });
 
       expect(
         cloudinaryMocks.deleteResourcesByPrefix.mock.invocationCallOrder[0],
@@ -562,7 +564,9 @@ describe('CloudinaryService', () => {
         new Error('folder not empty'),
       );
 
-      const out = await service.deleteFolder('myfolder');
+      const out = await service.deleteFolder('myfolder', {
+        save_deleted: true,
+      });
 
       expect(out.folderRemoved).toBe(false);
       expect(out.assetsDeleted).toBe(1);
@@ -582,7 +586,7 @@ describe('CloudinaryService', () => {
         });
       cloudinaryMocks.deleteFolder.mockResolvedValue({});
 
-      const out = await service.deleteFolder('pfx');
+      const out = await service.deleteFolder('pfx', { save_deleted: true });
 
       expect(cloudinaryMocks.deleteResourcesByPrefix).toHaveBeenCalledTimes(2);
       expect(cloudinaryMocks.deleteResourcesByPrefix).toHaveBeenNthCalledWith(
@@ -597,6 +601,17 @@ describe('CloudinaryService', () => {
       );
       expect(out.assetsDeleted).toBe(2);
       expect(out.folderRemoved).toBe(true);
+    });
+
+    it('deleteFolder requires save_deleted=true', async () => {
+      await expect(
+        service.deleteFolder('myfolder', { save_deleted: false }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.deleteFolder('myfolder', { save_deleted: false }),
+      ).rejects.toThrow(
+        'security error: save_deleted is required to save deleted assets.',
+      );
     });
   });
 

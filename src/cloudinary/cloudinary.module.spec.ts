@@ -2,7 +2,7 @@ import { Injectable, Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { CloudinaryModule } from './cloudinary.module';
 import { CloudinaryService } from './cloudinary.service';
-import type { CloudinaryOptionsFactory } from './utils/interface/cloudinary-options.interface';
+import type { CloudinaryOptionsFactory } from './interface/cloudinary-options.interface';
 
 describe('CloudinaryModule', () => {
   const validOptions = {

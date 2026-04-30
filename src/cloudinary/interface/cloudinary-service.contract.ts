@@ -32,6 +32,9 @@ export interface CloudinaryServiceContract {
   listSubFolders(parent: string): Promise<CloudinaryFolder[]>;
   renameFolder(from: string, to: string): Promise<{ from: string; to: string }>;
   deleteByFolder(path: string): Promise<{ assetsDeleted: number }>;
-  deleteFolder(path: string): Promise<CloudinaryDeleteFolderResult>;
+  deleteFolder(
+    path: string,
+    options: { save_deleted: boolean },
+  ): Promise<CloudinaryDeleteFolderResult>;
   deleteMany(publicIds: string[]): Promise<CloudinaryDeleteResult>;
 }
