@@ -1,0 +1,44 @@
+# -----------------------------------------------------------------------------
+# nestjs-cloudinary-community — keep the published tarball small and safe.
+# package.json "files" is the primary allowlist; this file prunes within it
+# and documents paths that must never ship if "files" is ever relaxed.
+# -----------------------------------------------------------------------------
+
+# Source, tests, and local config (not in "files" today; listed for safety)
+src
+test
+coverage
+.nyc_output
+*.log
+.env
+.env.*
+!.env.example
+
+# Tooling & CI (dev-only)
+.husky
+.github
+.vscode
+.idea
+*.spec.ts
+*.spec.cjs
+eslint.config.mjs
+jest.config.*
+jest.config.scripts.cjs
+nest-cli.json
+commitlint.config.cjs
+tsconfig.json
+tsconfig.build.json
+
+# Git
+.git
+.gitattributes
+.gitignore
+
+# Lockfiles (npm/yarn/pnpm — registry consumers resolve their own)
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+
+# Smaller dist: source maps and TS incremental info (not required at runtime)
+**/*.map
+**/*.tsbuildinfo
