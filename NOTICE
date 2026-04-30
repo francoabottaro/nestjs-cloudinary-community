@@ -1,0 +1,15 @@
+nestjs-cloudinary-community
+Copyright (c) <YOUR_NAME_OR_ENTITY> and contributors (see LICENSE).
+
+Third-party trademarks
+------------------------
+"Cloudinary" and "Cloudinary®" are registered trademarks of Cloudinary Ltd.
+This project is not affiliated with, endorsed by, sponsored by, or otherwise
+connected to Cloudinary Ltd. The trademark is used only nominatively to
+describe compatibility with the Cloudinary programmable media service.
+
+Official Cloudinary service terms: https://cloudinary.com/tou
+Cloudinary acceptable use policy: https://cloudinary.com/trust/aup
+
+This NOTICE file is provided for downstream redistributors who ship LICENSE
+and NOTICE together.
