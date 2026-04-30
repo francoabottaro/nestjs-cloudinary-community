@@ -39,6 +39,6 @@ yarn.lock
 package-lock.json
 pnpm-lock.yaml
 
-# Smaller dist: source maps and TS incremental info (not required at runtime)
-**/*.map
-**/*.tsbuildinfo
+# Under package.json "files", directories like dist/ are force-included (!dist/**),
+# so .npmignore cannot strip *.map or tsbuildinfo from dist. Omit those in
+# tsconfig.build.json (sourceMap/incremental) for publish builds instead.
