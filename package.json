@@ -1,6 +1,6 @@
 {
   "name": "nestjs-cloudinary-community",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Unofficial, community-maintained NestJS module for the Cloudinary service. Not affiliated with Cloudinary Ltd.",
   "author": "francobottaro",
   "contributors": [],
@@ -25,7 +25,8 @@
     "url": "https://github.com/<your-username>/nestjs-cloudinary-community/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "bin": {
     "nestjs-cloudinary-community": "scripts/init.js"
