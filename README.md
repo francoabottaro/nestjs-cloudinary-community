@@ -4,17 +4,53 @@
 
 **Spanish:** [README.es.md](README.es.md) · **Legal / trademarks:** [end of this file](#legal-and-trademarks)
 
+## Contents
+
+- [Install](#install)
+- [Register the module](#register-the-module)
+- [Inject `CloudinaryService`](#inject-cloudinaryservice)
+- [Uploads](#uploads)
+- [Replace](#replace-same-public_id-overwrite-asset)
+- [Deletes (prepare, then save)](#deletes-prepare-then-save)
+- [Folders (Admin API)](#folders-admin-api)
+- [Errors](#errors-what-your-app-will-catch)
+- [CLI](#cli-scriptsinitjs)
+- [Repo development](#repo-development)
+- [Legal and trademarks](#legal-and-trademarks)
+
 ---
 
 ## Install
 
+**Package**
+
 ```bash
-yarn add nestjs-cloudinary-community @nestjs/common @nestjs/core @nestjs/platform-express cloudinary reflect-metadata rxjs
+yarn add nestjs-cloudinary-community
+# or: npm install nestjs-cloudinary-community
 ```
 
-Env vars: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (official Cloudinary names). Optional: `CLOUDINARY_FOLDER_ROOT` (`folder_root`), `CLOUDINARY_MAX_UPLOAD_FILES` (`max_upload_files`, positive integer — caps batch size for `uploadMany` / `replaceMany`).
+**Peer dependencies** (install alongside this package if they are not already in your app):
 
-HTTP helpers (multipart / JSON form fields): `requireNonEmptyString`, `parsePublicIdsJson` — exported from `nestjs-cloudinary-community` for use in your controllers.
+```bash
+yarn add @nestjs/common @nestjs/core @nestjs/platform-express cloudinary reflect-metadata rxjs
+```
+
+This module wraps the official [`cloudinary`](https://www.npmjs.com/package/cloudinary) SDK. You may import the configured entry point as `cloudinary` from this package (re-export of `v2`) when you need direct Admin / Upload API calls outside `CloudinaryService` — you still must depend on `cloudinary` in your app.
+
+**Environment variables:** `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (official Cloudinary names). Optional: `CLOUDINARY_FOLDER_ROOT` (`folder_root`), `CLOUDINARY_MAX_UPLOAD_FILES` (`max_upload_files`, positive integer — caps batch size for `uploadMany` / `replaceMany`).
+
+**HTTP helpers** (multipart / JSON form fields): `requireNonEmptyString`, `parsePublicIdsJson` — use them in controllers next to `CloudinaryService`.
+
+### Public surface
+
+| Area        | Symbols                                                                  |
+| ----------- | ------------------------------------------------------------------------ |
+| Nest module | `CloudinaryModule`, `CloudinaryService`                                  |
+| DI tokens   | `CLOUDINARY_CLIENT`, `CLOUDINARY_OPTIONS`                                |
+| Deletes     | `CloudinaryDeleteBatch` (from `createDeleteBatch()`), batch result types |
+| Controllers | `requireNonEmptyString`, `parsePublicIdsJson`                            |
+| Types       | `CloudinaryServiceContract`, upload/delete/folder result interfaces      |
+| Advanced    | `cloudinary` — re-export of the official SDK (`v2`) for direct API use   |
 
 ## Register the module
 
@@ -129,7 +165,7 @@ export class MediaController {
 
 ### `uploadMany(files, folder?)`
 
-Uploads in parallel. If any file fails, successful uploads are rolled back via `deleteMany` on their `id_public`, then throws `Error` with message like `Failed to upload 1 of 2 files`.
+Uploads in parallel. If any file fails, successful uploads are rolled back via an **immediate internal batch delete** on their `id_public` (not the public `createDeleteBatch` API), then throws `Error` with message like `Failed to upload 1 of 2 files`.
 
 ```typescript
 import { Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
@@ -182,7 +218,7 @@ async replaceBatch(
 
 ---
 
-## Deletes (prepare → `save`)
+## Deletes (prepare, then save)
 
 Deletes are **two-phase** so you can queue work and only hit Cloudinary when you call `save()`:
 

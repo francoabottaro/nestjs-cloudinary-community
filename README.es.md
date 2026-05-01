@@ -4,17 +4,53 @@
 
 **Inglés:** [README.md](README.md) · **Legal / marcas:** [final de este archivo](#legal-y-marcas)
 
+## Contenido
+
+- [Instalación](#instalación)
+- [Registrar el módulo](#registrar-el-módulo)
+- [Inyectar `CloudinaryService`](#inyectar-cloudinaryservice)
+- [Subidas](#subidas)
+- [Reemplazo](#reemplazo-mismo-public_id-sobrescribe-el-recurso)
+- [Borrados (preparar, luego save)](#borrados-preparar-luego-save)
+- [Carpetas (Admin API)](#carpetas-admin-api)
+- [Errores](#errores-qué-captura-tu-app)
+- [CLI](#cli-scriptsinitjs)
+- [Desarrollo del repositorio](#desarrollo-del-repositorio)
+- [Legal y marcas](#legal-y-marcas)
+
 ---
 
 ## Instalación
 
+**Paquete**
+
 ```bash
-yarn add nestjs-cloudinary-community @nestjs/common @nestjs/core @nestjs/platform-express cloudinary reflect-metadata rxjs
+yarn add nestjs-cloudinary-community
+# o: npm install nestjs-cloudinary-community
 ```
 
-Variables de entorno: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (nombres oficiales de Cloudinary). Opcional: `CLOUDINARY_FOLDER_ROOT` (`folder_root`), `CLOUDINARY_MAX_UPLOAD_FILES` (`max_upload_files`, entero positivo — tope de archivos por lote en `uploadMany` / `replaceMany`).
+**Peer dependencies** (instalalas junto a este paquete si aún no están en tu app):
 
-Helpers HTTP (multipart / JSON): `requireNonEmptyString`, `parsePublicIdsJson` — exportados desde `nestjs-cloudinary-community` para usarlos en tus controladores.
+```bash
+yarn add @nestjs/common @nestjs/core @nestjs/platform-express cloudinary reflect-metadata rxjs
+```
+
+Este módulo envuelve el SDK oficial [`cloudinary`](https://www.npmjs.com/package/cloudinary). Podés importar el entry `cloudinary` desde este paquete (re-export de `v2`) si necesitás llamadas directas a la Admin / Upload API fuera de `CloudinaryService` — igual tenés que declarar `cloudinary` como dependencia en tu proyecto.
+
+**Variables de entorno:** `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (nombres oficiales de Cloudinary). Opcional: `CLOUDINARY_FOLDER_ROOT` (`folder_root`), `CLOUDINARY_MAX_UPLOAD_FILES` (`max_upload_files`, entero positivo — tope de archivos por lote en `uploadMany` / `replaceMany`).
+
+**Helpers HTTP** (multipart / JSON): `requireNonEmptyString`, `parsePublicIdsJson` — usalos en controladores junto a `CloudinaryService`.
+
+### Superficie pública
+
+| Área          | Símbolos                                                                          |
+| ------------- | --------------------------------------------------------------------------------- |
+| Módulo Nest   | `CloudinaryModule`, `CloudinaryService`                                           |
+| Tokens DI     | `CLOUDINARY_CLIENT`, `CLOUDINARY_OPTIONS`                                         |
+| Borrados      | `CloudinaryDeleteBatch` (vía `createDeleteBatch()`), tipos de resultado del batch |
+| Controladores | `requireNonEmptyString`, `parsePublicIdsJson`                                     |
+| Tipos         | `CloudinaryServiceContract`, interfaces de resultados                             |
+| Avanzado      | `cloudinary` — re-export del SDK oficial (`v2`) para uso directo de la API        |
 
 ## Registrar el módulo
 
@@ -129,7 +165,7 @@ export class MediaController {
 
 ### `uploadMany(files, folder?)`
 
-Subidas en paralelo. Si falla algún archivo, se hace rollback de las correctas con `deleteMany` sobre sus `id_public` y se lanza `Error` con mensaje tipo `Failed to upload 1 of 2 files`.
+Subidas en paralelo. Si falla algún archivo, se hace rollback de las correctas con un **borrado interno inmediato** sobre sus `id_public` (no es la API pública `createDeleteBatch`) y se lanza `Error` con mensaje tipo `Failed to upload 1 of 2 files`.
 
 ```typescript
 import { Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
@@ -182,7 +218,7 @@ async replaceBatch(
 
 ---
 
-## Borrados (preparar → `save`)
+## Borrados (preparar, luego save)
 
 Los borrados son en **dos fases** para que puedas encolar y solo llamar a Cloudinary cuando ejecutes `save()`:
 
