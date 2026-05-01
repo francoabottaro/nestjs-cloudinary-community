@@ -19,31 +19,35 @@ import type {
   CloudinaryFolder,
   CloudinaryUploadSuccess,
 } from './interface/cloudinary-models.interface';
+import {
+  CloudinaryDeleteBatch,
+  type CloudinaryDeleteBatchExecutor,
+  type DeleteFolderPrepareOptions,
+} from './cloudinary-delete-batch';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
 
 export type {
+  CloudinaryDeleteBatchOpResult,
+  CloudinaryDeleteBatchSaveResult,
   CloudinaryDeleteFolderResult,
   CloudinaryDeleteResult,
   CloudinaryError,
   CloudinaryFolder,
   CloudinaryUploadSuccess,
 } from './interface/cloudinary-models.interface';
+export type { DeleteFolderPrepareOptions } from './cloudinary-delete-batch';
+export { CloudinaryDeleteBatch } from './cloudinary-delete-batch';
 
 function settledReasonMessage(reason: unknown): string {
   if (reason instanceof Error) return reason.message;
   return 'Unknown error';
 }
 
-interface DeleteFolderOptions {
-  save_deleted: boolean;
-}
-
 @Injectable()
 export class CloudinaryService implements CloudinaryServiceContract {
   readonly #logger = new Logger(CloudinaryService.name);
   readonly #defaultUploadFolder: string;
-  readonly #maxUploadFiles: number | undefined;
 
   constructor(
     @Inject(CLOUDINARY_CLIENT) configured: unknown,
@@ -53,17 +57,6 @@ export class CloudinaryService implements CloudinaryServiceContract {
     const root = options.folder_root?.trim();
     this.#defaultUploadFolder =
       root !== undefined && root.length > 0 ? root : 'general';
-    const m = options.max_upload_files;
-    this.#maxUploadFiles =
-      m !== undefined && Number.isInteger(m) && m > 0 ? m : undefined;
-  }
-
-  #assertBatchFileLimit(count: number): void {
-    if (this.#maxUploadFiles !== undefined && count > this.#maxUploadFiles) {
-      throw new BadRequestException(
-        `At most ${this.#maxUploadFiles} file(s) allowed per batch (max_upload_files).`,
-      );
-    }
   }
 
   /** Resolves Cloudinary `folder` upload option: explicit non-blank `folder`, else module `folder_root`, else `'general'`. */
@@ -107,7 +100,6 @@ export class CloudinaryService implements CloudinaryServiceContract {
     files: Express.Multer.File[],
     folder?: string,
   ): Promise<CloudinaryUploadSuccess[]> {
-    this.#assertBatchFileLimit(files.length);
     const resolvedFolder = this.#effectiveUploadFolder(folder);
     const results = await Promise.allSettled(
       files.map((file) => this.uploadOne(file, resolvedFolder)),
@@ -134,7 +126,9 @@ export class CloudinaryService implements CloudinaryServiceContract {
     );
 
     if (succeeded.length > 0) {
-      const rollback = await this.deleteMany(succeeded.map((s) => s.id_public));
+      const rollback = await this.#deleteManyImmediate(
+        succeeded.map((s) => s.id_public),
+      );
       if (rollback.failed) {
         this.#logger.error(
           'Rollback partially failed. Orphaned Cloudinary IDs:',
@@ -179,7 +173,6 @@ export class CloudinaryService implements CloudinaryServiceContract {
     files: Express.Multer.File[],
     publicIds: string[],
   ): Promise<CloudinaryUploadSuccess[]> {
-    this.#assertBatchFileLimit(files.length);
     if (files.length !== publicIds.length) {
       throw new BadRequestException('Files and publicIds length must match.');
     }
@@ -282,10 +275,74 @@ export class CloudinaryService implements CloudinaryServiceContract {
   }
 
   /**
-   * Deletes all assets whose `public_id` starts with `path` (folder prefix).
-   * Does not remove the folder record itself.
+   * Builds a delete batch: `prepare*` methods only queue work; {@link CloudinaryDeleteBatch.save}
+   * executes Cloudinary calls in order. Use one batch per HTTP request.
    */
-  async deleteByFolder(path: string): Promise<{ assetsDeleted: number }> {
+  createDeleteBatch(): CloudinaryDeleteBatch {
+    const executor: CloudinaryDeleteBatchExecutor = {
+      destroyOne: (id) => this.#destroyOne(id),
+      deleteManyImmediate: (ids) => this.#deleteManyImmediate(ids),
+      deleteByFolderImmediate: (path) => this.#deleteByFolderImmediate(path),
+      deleteFolderImmediate: (path, options) =>
+        this.#deleteFolderImmediate(path, options),
+    };
+    return new CloudinaryDeleteBatch(executor);
+  }
+
+  // ─── DELETES (immediate, internal — e.g. upload rollback) ───────────────────
+
+  async #destroyOne(publicId: string): Promise<void> {
+    await cloudinary.uploader.destroy(publicId);
+  }
+
+  async #deleteManyImmediate(
+    publicIds: string[],
+  ): Promise<CloudinaryDeleteResult> {
+    try {
+      await cloudinary.api.delete_resources(publicIds);
+      return {
+        success: publicIds.length,
+        total: publicIds.length,
+        failed: false,
+      };
+    } catch (error) {
+      this.#logger.warn(
+        'Batch delete failed, falling back to individual deletes',
+        error,
+      );
+    }
+
+    const results = await Promise.allSettled(
+      publicIds.map((id) => this.#destroyOne(id)),
+    );
+
+    const errors: CloudinaryError[] = [];
+    let success = 0;
+
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        success++;
+      } else {
+        errors.push({
+          public_id: publicIds[i],
+          message: settledReasonMessage(result.reason),
+        });
+        this.#logger.warn(`Failed to delete: ${publicIds[i]}`, result.reason);
+      }
+    });
+
+    const failed = errors.length > 0;
+    return {
+      success,
+      total: publicIds.length,
+      failed,
+      ...(failed && { errors }),
+    };
+  }
+
+  async #deleteByFolderImmediate(
+    path: string,
+  ): Promise<{ assetsDeleted: number }> {
     const p = this.#requireNonEmptyPath(path, 'folder prefix');
     try {
       const assetsDeleted = await this.#deleteAssetsByPrefixPaged(p);
@@ -295,13 +352,9 @@ export class CloudinaryService implements CloudinaryServiceContract {
     }
   }
 
-  /**
-   * Deletes all assets under `path`, then removes the empty folder.
-   * If `delete_folder` fails (e.g. non-empty subfolders), returns `folderRemoved: false` with `reason`.
-   */
-  async deleteFolder(
+  async #deleteFolderImmediate(
     path: string,
-    options: DeleteFolderOptions,
+    options: DeleteFolderPrepareOptions,
   ): Promise<CloudinaryDeleteFolderResult> {
     if (!options.save_deleted) {
       throw new BadRequestException(
@@ -331,57 +384,6 @@ export class CloudinaryService implements CloudinaryServiceContract {
         reason: message,
       };
     }
-  }
-
-  // ─── DELETES ────────────────────────────────────────────────────────────────
-
-  async deleteOne(publicId: string): Promise<void> {
-    await cloudinary.uploader.destroy(publicId);
-  }
-
-  async deleteMany(publicIds: string[]): Promise<CloudinaryDeleteResult> {
-    // Prefer native batch delete
-    try {
-      await cloudinary.api.delete_resources(publicIds);
-      return {
-        success: publicIds.length,
-        total: publicIds.length,
-        failed: false,
-      };
-    } catch (error) {
-      this.#logger.warn(
-        'Batch delete failed, falling back to individual deletes',
-        error,
-      );
-    }
-
-    // Fallback: per-resource deletes with allSettled
-    const results = await Promise.allSettled(
-      publicIds.map((id) => this.deleteOne(id)),
-    );
-
-    const errors: CloudinaryError[] = [];
-    let success = 0;
-
-    results.forEach((result, i) => {
-      if (result.status === 'fulfilled') {
-        success++;
-      } else {
-        errors.push({
-          public_id: publicIds[i],
-          message: settledReasonMessage(result.reason),
-        });
-        this.#logger.warn(`Failed to delete: ${publicIds[i]}`, result.reason);
-      }
-    });
-
-    const failed = errors.length > 0;
-    return {
-      success,
-      total: publicIds.length,
-      failed,
-      ...(failed && { errors }),
-    };
   }
 
   // ─── PRIVATE ────────────────────────────────────────────────────────────────

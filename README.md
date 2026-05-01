@@ -182,32 +182,61 @@ async replaceBatch(
 
 ---
 
-## Deletes
+## Deletes (prepare → `save`)
 
-### `deleteOne(publicId)`
+Deletes are **two-phase** so you can queue work and only hit Cloudinary when you call `save()`:
+
+1. `createDeleteBatch()` — returns a batch object (create **one per request**; `CloudinaryService` is a singleton).
+2. `prepareDeleteOne` / `prepareDeleteMany` / `prepareDeleteByFolder` / `prepareDeleteFolder` — **only enqueue** instructions (no Cloudinary calls yet).
+3. `save()` — runs queued operations **in order**.
+
+**Why:** reduces accidental destructive deletes (you must finish building the batch before anything is executed) and keeps multi-step flows explicit.
+
+### `createDeleteBatch()`
 
 ```typescript
-await this.cloudinary.deleteOne('folder/my_image');
+const batch = this.cloudinary.createDeleteBatch();
+
+batch.prepareDeleteOne('folder/a').prepareDeleteMany(['folder/b', 'folder/c']);
+
+const { results } = await batch.save();
+// results: array of { kind: 'one' | 'many' | 'byFolder' | 'folder', ... }
 ```
 
-### `deleteMany(publicIds)`
+### `prepareDeleteMany(publicIds)`
 
-Tries `delete_resources` batch first; on failure, falls back to per-id `destroy`. Returns:
+Uses `delete_resources` first; on failure, falls back to per-id `destroy`. The `save()` result includes:
 
 ```typescript
 {
-  success: number;
-  total: number;
-  failed: boolean;
-  errors?: { public_id: string; message: string }[];
+  kind: 'many';
+  result: {
+    success: number;
+    total: number;
+    failed: boolean;
+    errors?: { public_id: string; message: string }[];
+  };
 }
 ```
 
+### `prepareDeleteByFolder(path)`
+
+Prefix purge (`delete_resources_by_prefix`). Does **not** call `delete_folder`.
+
+### `prepareDeleteFolder(path, { save_deleted: true })`
+
+Purges by prefix, then calls `delete_folder`. If `delete_folder` fails after purge, `result.folderRemoved` is `false` and `reason` is set.
+
+**Security note:** `save_deleted: true` is required on `prepareDeleteFolder` (explicit opt-in), matching Cloudinary Admin API expectations for saving deleted assets.
+
 ```typescript
-const result = await this.cloudinary.deleteMany(['a/b', 'a/c']);
-if (result.failed) {
-  console.log(result.errors);
-}
+const { results } = await this.cloudinary
+  .createDeleteBatch()
+  .prepareDeleteFolder('myfolder', { save_deleted: true })
+  .save();
+
+const folder = results.find((r) => r.kind === 'folder');
+// folder.result.folderRemoved === false → check folder.result.reason
 ```
 
 ---
@@ -239,31 +268,11 @@ const children = await this.cloudinary.listSubFolders('parent');
 const { from, to } = await this.cloudinary.renameFolder('old/path', 'new/path');
 ```
 
-### `deleteByFolder(path)`
-
-Deletes assets whose `public_id` starts with `path` (prefix purge). Does **not** call `delete_folder`.
-
-```typescript
-const { assetsDeleted } = await this.cloudinary.deleteByFolder('my-prefix');
-```
-
-### `deleteFolder(path)`
-
-Purges by prefix (paginated `delete_resources_by_prefix`), then calls `delete_folder`.
-
-**Security note:** this method requires `{ save_deleted: true }` as an explicit opt-in. It helps prevent accidental destructive deletes by making the caller acknowledge that deleted assets must be saved (Cloudinary Admin API `save_deleted`).
-
-```typescript
-const { assetsDeleted, folderRemoved, reason } =
-  await this.cloudinary.deleteFolder('myfolder', { save_deleted: true });
-// folderRemoved === false → check reason
-```
-
 ---
 
 ## Errors (what your app will catch)
 
-- **`BadRequestException`** — empty folder paths, `replaceMany` length mismatch, empty file buffer, etc.
+- **`BadRequestException`** — empty folder paths, `replaceMany` length mismatch, empty file buffer, invalid delete batch prepares, etc.
 - **`ServiceUnavailableException`** — heuristic on message (e.g. 401/403/signature) for upload/replace/folder admin calls.
 - **`HttpException`** — rethrown as-is.
 

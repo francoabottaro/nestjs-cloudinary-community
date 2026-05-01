@@ -1,9 +1,8 @@
 import type {
-  CloudinaryDeleteFolderResult,
-  CloudinaryDeleteResult,
   CloudinaryFolder,
   CloudinaryUploadSuccess,
 } from './cloudinary-models.interface';
+import type { CloudinaryDeleteBatch } from '../cloudinary-delete-batch';
 
 /**
  * Public API of {@link CloudinaryService} for tests and consumers that must not
@@ -26,15 +25,12 @@ export interface CloudinaryServiceContract {
     files: Express.Multer.File[],
     publicIds: string[],
   ): Promise<CloudinaryUploadSuccess[]>;
-  deleteOne(publicId: string): Promise<void>;
   createFolder(path: string): Promise<{ path: string; name: string }>;
   listRootFolders(): Promise<CloudinaryFolder[]>;
   listSubFolders(parent: string): Promise<CloudinaryFolder[]>;
   renameFolder(from: string, to: string): Promise<{ from: string; to: string }>;
-  deleteByFolder(path: string): Promise<{ assetsDeleted: number }>;
-  deleteFolder(
-    path: string,
-    options: { save_deleted: boolean },
-  ): Promise<CloudinaryDeleteFolderResult>;
-  deleteMany(publicIds: string[]): Promise<CloudinaryDeleteResult>;
+  /**
+   * Queued deletes: call `prepare*` on the batch, then `save()` to execute.
+   */
+  createDeleteBatch(): CloudinaryDeleteBatch;
 }

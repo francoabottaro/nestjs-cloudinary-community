@@ -17,12 +17,6 @@ function assertOptions(opts: CloudinaryModuleOptions): void {
       'CloudinaryModule: cloud_name, api_key, and api_secret are required',
     );
   }
-  const m = opts.max_upload_files;
-  if (m !== undefined && (!Number.isInteger(m) || m <= 0)) {
-    throw new Error(
-      'CloudinaryModule: max_upload_files must be a positive integer when set',
-    );
-  }
 }
 
 function optionsFromEnv(): CloudinaryModuleOptions {
@@ -35,23 +29,11 @@ function optionsFromEnv(): CloudinaryModuleOptions {
     );
   }
   const folder_root = process.env.CLOUDINARY_FOLDER_ROOT?.trim();
-  const rawMax = process.env.CLOUDINARY_MAX_UPLOAD_FILES?.trim();
-  let max_upload_files: number | undefined;
-  if (rawMax) {
-    const n = Number.parseInt(rawMax, 10);
-    if (!Number.isInteger(n) || n <= 0 || String(n) !== rawMax) {
-      throw new Error(
-        'CloudinaryModule: CLOUDINARY_MAX_UPLOAD_FILES must be a positive integer (e.g. 10)',
-      );
-    }
-    max_upload_files = n;
-  }
   return {
     cloud_name,
     api_key,
     api_secret,
     ...(folder_root ? { folder_root } : {}),
-    ...(max_upload_files !== undefined ? { max_upload_files } : {}),
   };
 }
 
@@ -61,10 +43,7 @@ const cloudinaryClientProvider: Provider = {
   useFactory: (opts: CloudinaryModuleOptions) => {
     assertOptions(opts);
     return cloudinary.config({
-      cloud_name: opts.cloud_name,
-      api_key: opts.api_key,
-      api_secret: opts.api_secret,
-      secure: opts.secure,
+      ...opts,
     });
   },
 };

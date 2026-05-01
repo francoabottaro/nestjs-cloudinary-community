@@ -25,3 +25,14 @@ export interface CloudinaryDeleteFolderResult {
   folderRemoved: boolean;
   reason?: string;
 }
+
+/** Result entry for one queued delete operation after `CloudinaryDeleteBatch.save()`. */
+export type CloudinaryDeleteBatchOpResult =
+  | { kind: 'one'; publicId: string }
+  | { kind: 'many'; result: CloudinaryDeleteResult }
+  | { kind: 'byFolder'; path: string; assetsDeleted: number }
+  | { kind: 'folder'; path: string; result: CloudinaryDeleteFolderResult };
+
+export interface CloudinaryDeleteBatchSaveResult {
+  results: CloudinaryDeleteBatchOpResult[];
+}

@@ -48,9 +48,6 @@ CLOUDINARY_API_SECRET=${PLACEHOLDERS.CLOUDINARY_API_SECRET}
 
 # Optional: default upload folder for uploadOne/uploadMany when folder arg is omitted (maps to CloudinaryModuleOptions.folder_root)
 # CLOUDINARY_FOLDER_ROOT=my-app
-
-# Optional: max files per uploadMany/replaceMany call (positive integer; maps to CloudinaryModuleOptions.max_upload_files)
-# CLOUDINARY_MAX_UPLOAD_FILES=10
 `;
 }
 

@@ -272,48 +272,6 @@ describe('CloudinaryService', () => {
     });
   });
 
-  describe('max_upload_files option', () => {
-    let svc: CloudinaryServiceContract;
-
-    beforeEach(async () => {
-      resetMocks();
-      const module = await Test.createTestingModule({
-        imports: [
-          CloudinaryModule.forRoot({
-            cloud_name: 'test_cloud',
-            api_key: 'test_key',
-            api_secret: 'test_secret',
-            max_upload_files: 2,
-          }),
-        ],
-      }).compile();
-      svc = module.get(CloudinaryService);
-    });
-
-    it('rejects uploadMany above the limit', async () => {
-      await expect(
-        svc.uploadMany([
-          multerFile(Buffer.from([1])),
-          multerFile(Buffer.from([2])),
-          multerFile(Buffer.from([3])),
-        ]),
-      ).rejects.toThrow(/At most 2 file\(s\) allowed per batch/);
-    });
-
-    it('rejects replaceMany above the limit before length check', async () => {
-      await expect(
-        svc.replaceMany(
-          [
-            multerFile(Buffer.from([1])),
-            multerFile(Buffer.from([2])),
-            multerFile(Buffer.from([3])),
-          ],
-          ['a'],
-        ),
-      ).rejects.toThrow(/At most 2 file/);
-    });
-  });
-
   describe('uploadMany', () => {
     it('returns all results when every upload succeeds', async () => {
       mockUploadStreamSuccess({
@@ -444,10 +402,15 @@ describe('CloudinaryService', () => {
     });
   });
 
-  describe('deleteOne', () => {
-    it('calls cloudinary destroy', async () => {
-      await service.deleteOne('public/id');
+  describe('createDeleteBatch', () => {
+    it('prepareDeleteOne + save calls destroy', async () => {
+      await service.createDeleteBatch().prepareDeleteOne('public/id').save();
       expect(cloudinaryMocks.destroy).toHaveBeenCalledWith('public/id');
+    });
+
+    it('does not call Cloudinary until save()', () => {
+      service.createDeleteBatch().prepareDeleteOne('x');
+      expect(cloudinaryMocks.destroy).not.toHaveBeenCalled();
     });
   });
 
@@ -521,41 +484,50 @@ describe('CloudinaryService', () => {
       );
     });
 
-    it('deleteByFolder only purges by prefix', async () => {
+    it('prepareDeleteByFolder + save only purges by prefix', async () => {
       cloudinaryMocks.deleteResourcesByPrefix.mockResolvedValue({
         deleted: { 'p/a': 'deleted', 'p/b': 'deleted' },
         partial: false,
       });
 
-      const out = await service.deleteByFolder('p');
+      const { results } = await service
+        .createDeleteBatch()
+        .prepareDeleteByFolder('p')
+        .save();
 
-      expect(out.assetsDeleted).toBe(2);
+      expect(results).toEqual([
+        { kind: 'byFolder', path: 'p', assetsDeleted: 2 },
+      ]);
       expect(cloudinaryMocks.deleteResourcesByPrefix).toHaveBeenCalled();
       expect(cloudinaryMocks.deleteFolder).not.toHaveBeenCalled();
     });
 
-    it('deleteFolder purges then removes folder', async () => {
+    it('prepareDeleteFolder + save purges then removes folder', async () => {
       cloudinaryMocks.deleteResourcesByPrefix.mockResolvedValue({
         deleted: { x: 'deleted' },
         partial: false,
       });
       cloudinaryMocks.deleteFolder.mockResolvedValue({});
 
-      const out = await service.deleteFolder('myfolder', {
-        save_deleted: true,
-      });
+      const { results } = await service
+        .createDeleteBatch()
+        .prepareDeleteFolder('myfolder', { save_deleted: true })
+        .save();
 
       expect(
         cloudinaryMocks.deleteResourcesByPrefix.mock.invocationCallOrder[0],
       ).toBeLessThan(cloudinaryMocks.deleteFolder.mock.invocationCallOrder[0]);
       expect(cloudinaryMocks.deleteFolder).toHaveBeenCalledWith('myfolder');
-      expect(out).toEqual({
-        assetsDeleted: 1,
-        folderRemoved: true,
-      });
+      expect(results).toEqual([
+        {
+          kind: 'folder',
+          path: 'myfolder',
+          result: { assetsDeleted: 1, folderRemoved: true },
+        },
+      ]);
     });
 
-    it('deleteFolder returns folderRemoved false when delete_folder fails', async () => {
+    it('prepareDeleteFolder + save returns folderRemoved false when delete_folder fails', async () => {
       cloudinaryMocks.deleteResourcesByPrefix.mockResolvedValue({
         deleted: { a: 'deleted' },
         partial: false,
@@ -564,16 +536,21 @@ describe('CloudinaryService', () => {
         new Error('folder not empty'),
       );
 
-      const out = await service.deleteFolder('myfolder', {
-        save_deleted: true,
-      });
+      const { results } = await service
+        .createDeleteBatch()
+        .prepareDeleteFolder('myfolder', { save_deleted: true })
+        .save();
 
-      expect(out.folderRemoved).toBe(false);
-      expect(out.assetsDeleted).toBe(1);
-      expect(out.reason).toContain('folder not empty');
+      const folder = results[0];
+      expect(folder?.kind).toBe('folder');
+      if (folder?.kind === 'folder') {
+        expect(folder.result.folderRemoved).toBe(false);
+        expect(folder.result.assetsDeleted).toBe(1);
+        expect(folder.result.reason).toContain('folder not empty');
+      }
     });
 
-    it('deleteFolder paginates delete_resources_by_prefix when partial', async () => {
+    it('prepareDeleteFolder + save paginates delete_resources_by_prefix when partial', async () => {
       cloudinaryMocks.deleteResourcesByPrefix
         .mockResolvedValueOnce({
           deleted: { a: 'deleted' },
@@ -586,7 +563,10 @@ describe('CloudinaryService', () => {
         });
       cloudinaryMocks.deleteFolder.mockResolvedValue({});
 
-      const out = await service.deleteFolder('pfx', { save_deleted: true });
+      const { results } = await service
+        .createDeleteBatch()
+        .prepareDeleteFolder('pfx', { save_deleted: true })
+        .save();
 
       expect(cloudinaryMocks.deleteResourcesByPrefix).toHaveBeenCalledTimes(2);
       expect(cloudinaryMocks.deleteResourcesByPrefix).toHaveBeenNthCalledWith(
@@ -599,34 +579,46 @@ describe('CloudinaryService', () => {
         'pfx',
         { next_cursor: 'c1' },
       );
-      expect(out.assetsDeleted).toBe(2);
-      expect(out.folderRemoved).toBe(true);
+      const folder = results[0];
+      expect(folder?.kind).toBe('folder');
+      if (folder?.kind === 'folder') {
+        expect(folder.result.assetsDeleted).toBe(2);
+        expect(folder.result.folderRemoved).toBe(true);
+      }
     });
 
-    it('deleteFolder requires save_deleted=true', async () => {
-      await expect(
-        service.deleteFolder('myfolder', { save_deleted: false }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      await expect(
-        service.deleteFolder('myfolder', { save_deleted: false }),
-      ).rejects.toThrow(
+    it('prepareDeleteFolder requires save_deleted=true', () => {
+      expect(() =>
+        service.createDeleteBatch().prepareDeleteFolder('myfolder', {
+          save_deleted: false,
+        }),
+      ).toThrow(BadRequestException);
+      expect(() =>
+        service.createDeleteBatch().prepareDeleteFolder('myfolder', {
+          save_deleted: false,
+        }),
+      ).toThrow(
         'security error: save_deleted is required to save deleted assets.',
       );
     });
   });
 
-  describe('deleteMany', () => {
+  describe('createDeleteBatch prepareDeleteMany', () => {
     it('uses batch delete_resources when it succeeds', async () => {
       cloudinaryMocks.deleteResources.mockResolvedValue(undefined);
 
-      const out = await service.deleteMany(['a', 'b']);
+      const { results } = await service
+        .createDeleteBatch()
+        .prepareDeleteMany(['a', 'b'])
+        .save();
 
       expect(cloudinaryMocks.deleteResources).toHaveBeenCalledWith(['a', 'b']);
-      expect(out).toEqual({
-        success: 2,
-        total: 2,
-        failed: false,
-      });
+      expect(results).toEqual([
+        {
+          kind: 'many',
+          result: { success: 2, total: 2, failed: false },
+        },
+      ]);
     });
 
     it('falls back to destroy per id when batch fails', async () => {
@@ -634,11 +626,18 @@ describe('CloudinaryService', () => {
         new Error('batch down'),
       );
 
-      const out = await service.deleteMany(['x', 'y']);
+      const { results } = await service
+        .createDeleteBatch()
+        .prepareDeleteMany(['x', 'y'])
+        .save();
 
       expect(cloudinaryMocks.destroy).toHaveBeenCalledTimes(2);
-      expect(out.failed).toBe(false);
-      expect(out.success).toBe(2);
+      const many = results[0];
+      expect(many?.kind).toBe('many');
+      if (many?.kind === 'many') {
+        expect(many.result.failed).toBe(false);
+        expect(many.result.success).toBe(2);
+      }
     });
 
     it('returns partial errors when individual destroys fail', async () => {
@@ -649,12 +648,19 @@ describe('CloudinaryService', () => {
         .mockResolvedValueOnce({ result: 'ok' })
         .mockRejectedValueOnce(new Error('nope'));
 
-      const out = await service.deleteMany(['good', 'bad']);
+      const { results } = await service
+        .createDeleteBatch()
+        .prepareDeleteMany(['good', 'bad'])
+        .save();
 
-      expect(out.failed).toBe(true);
-      expect(out.success).toBe(1);
-      expect(out.errors).toHaveLength(1);
-      expect(out.errors?.[0].public_id).toBe('bad');
+      const many = results[0];
+      expect(many?.kind).toBe('many');
+      if (many?.kind === 'many') {
+        expect(many.result.failed).toBe(true);
+        expect(many.result.success).toBe(1);
+        expect(many.result.errors).toHaveLength(1);
+        expect(many.result.errors?.[0].public_id).toBe('bad');
+      }
     });
   });
 
