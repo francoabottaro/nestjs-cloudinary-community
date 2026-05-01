@@ -14,6 +14,10 @@ export interface CloudinaryModuleOptions extends ConfigOptions {
    * omitted or blank. Falls back to `'general'` when unset.
    */
   folder_root?: string;
+  /**
+   * When set, `uploadMany` and `replaceMany` reject calls with more than this many files.
+   */
+  max_upload_files?: number;
 }
 
 export interface CloudinaryOptionsFactory {

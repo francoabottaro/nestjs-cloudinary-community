@@ -17,6 +17,28 @@ function assertOptions(opts: CloudinaryModuleOptions): void {
       'CloudinaryModule: cloud_name, api_key, and api_secret are required',
     );
   }
+  if (
+    opts.max_upload_files !== undefined &&
+    (typeof opts.max_upload_files !== 'number' ||
+      !Number.isInteger(opts.max_upload_files) ||
+      opts.max_upload_files < 1)
+  ) {
+    throw new Error(
+      'CloudinaryModule: max_upload_files must be a positive integer when set',
+    );
+  }
+}
+
+function maxUploadFilesFromEnv(): number | undefined {
+  const raw = process.env.CLOUDINARY_MAX_UPLOAD_FILES?.trim();
+  if (raw === undefined || raw === '') return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error(
+      'CloudinaryModule: CLOUDINARY_MAX_UPLOAD_FILES must be a positive integer when set',
+    );
+  }
+  return n;
 }
 
 function optionsFromEnv(): CloudinaryModuleOptions {
@@ -29,11 +51,13 @@ function optionsFromEnv(): CloudinaryModuleOptions {
     );
   }
   const folder_root = process.env.CLOUDINARY_FOLDER_ROOT?.trim();
+  const max_upload_files = maxUploadFilesFromEnv();
   return {
     cloud_name,
     api_key,
     api_secret,
     ...(folder_root ? { folder_root } : {}),
+    ...(max_upload_files !== undefined ? { max_upload_files } : {}),
   };
 }
 
@@ -53,7 +77,7 @@ export class CloudinaryModule {
   /**
    * Register Cloudinary with explicit options, or omit `options` to read
    * `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` from `process.env`
-   * (optional: `CLOUDINARY_FOLDER_ROOT` → `folder_root`).
+   * (optional: `CLOUDINARY_FOLDER_ROOT` → `folder_root`, `CLOUDINARY_MAX_UPLOAD_FILES` → `max_upload_files`).
    */
   static forRoot(
     options?: CloudinaryModuleOptions,

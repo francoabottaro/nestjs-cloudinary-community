@@ -48,6 +48,7 @@ function settledReasonMessage(reason: unknown): string {
 export class CloudinaryService implements CloudinaryServiceContract {
   readonly #logger = new Logger(CloudinaryService.name);
   readonly #defaultUploadFolder: string;
+  readonly #maxUploadFiles: number | undefined;
 
   constructor(
     @Inject(CLOUDINARY_CLIENT) configured: unknown,
@@ -57,6 +58,17 @@ export class CloudinaryService implements CloudinaryServiceContract {
     const root = options.folder_root?.trim();
     this.#defaultUploadFolder =
       root !== undefined && root.length > 0 ? root : 'general';
+    this.#maxUploadFiles = options.max_upload_files;
+  }
+
+  #assertBatchFileCountWithinLimit(count: number): void {
+    const max = this.#maxUploadFiles;
+    if (max === undefined) return;
+    if (count > max) {
+      throw new BadRequestException(
+        `At most ${max} files allowed per batch (max_upload_files). Received ${count}.`,
+      );
+    }
   }
 
   /** Resolves Cloudinary `folder` upload option: explicit non-blank `folder`, else module `folder_root`, else `'general'`. */
@@ -100,6 +112,7 @@ export class CloudinaryService implements CloudinaryServiceContract {
     files: Express.Multer.File[],
     folder?: string,
   ): Promise<CloudinaryUploadSuccess[]> {
+    this.#assertBatchFileCountWithinLimit(files.length);
     const resolvedFolder = this.#effectiveUploadFolder(folder);
     const results = await Promise.allSettled(
       files.map((file) => this.uploadOne(file, resolvedFolder)),
@@ -176,6 +189,7 @@ export class CloudinaryService implements CloudinaryServiceContract {
     if (files.length !== publicIds.length) {
       throw new BadRequestException('Files and publicIds length must match.');
     }
+    this.#assertBatchFileCountWithinLimit(files.length);
 
     const results = await Promise.allSettled(
       files.map((file, i) => this.replaceOne(file, publicIds[i])),

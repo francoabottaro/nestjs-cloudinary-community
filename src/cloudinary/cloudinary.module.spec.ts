@@ -29,6 +29,15 @@ describe('CloudinaryModule', () => {
         }),
       ).toThrow(/cloud_name, api_key, and api_secret are required/);
     });
+
+    it('throws when max_upload_files is not a positive integer', () => {
+      expect(() =>
+        CloudinaryModule.forRoot({
+          ...validOptions,
+          max_upload_files: 0,
+        }),
+      ).toThrow(/max_upload_files must be a positive integer/);
+    });
   });
 
   describe('forFeature', () => {
@@ -66,6 +75,7 @@ describe('CloudinaryModule', () => {
       'CLOUDINARY_CLOUD_NAME',
       'CLOUDINARY_API_KEY',
       'CLOUDINARY_API_SECRET',
+      'CLOUDINARY_MAX_UPLOAD_FILES',
     ] as const;
     let snapshot: Record<string, string | undefined>;
 
@@ -102,6 +112,19 @@ describe('CloudinaryModule', () => {
       }).compile();
 
       expect(mod.get(CloudinaryService)).toBeDefined();
+    });
+
+    it('rejects compile when CLOUDINARY_MAX_UPLOAD_FILES is invalid', async () => {
+      process.env.CLOUDINARY_CLOUD_NAME = 'e';
+      process.env.CLOUDINARY_API_KEY = 'k';
+      process.env.CLOUDINARY_API_SECRET = 's';
+      process.env.CLOUDINARY_MAX_UPLOAD_FILES = '0';
+
+      await expect(
+        Test.createTestingModule({
+          imports: [CloudinaryModule.forRoot()],
+        }).compile(),
+      ).rejects.toThrow(/CLOUDINARY_MAX_UPLOAD_FILES/);
     });
   });
 

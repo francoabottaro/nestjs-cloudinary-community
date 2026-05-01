@@ -289,6 +289,29 @@ describe('CloudinaryService', () => {
       expect(out[1].id_public).toBe('p1');
     });
 
+    it('throws when file count exceeds max_upload_files', async () => {
+      const module = await Test.createTestingModule({
+        imports: [
+          CloudinaryModule.forRoot({
+            cloud_name: 'test_cloud',
+            api_key: 'test_key',
+            api_secret: 'test_secret',
+            max_upload_files: 2,
+          }),
+        ],
+      }).compile();
+      const limited = module.get(CloudinaryService);
+
+      await expect(
+        limited.uploadMany([
+          multerFile(Buffer.from([1])),
+          multerFile(Buffer.from([2])),
+          multerFile(Buffer.from([3])),
+        ]),
+      ).rejects.toThrow(BadRequestException);
+      expect(cloudinaryMocks.uploadStream).not.toHaveBeenCalled();
+    });
+
     it('rolls back successful uploads and throws when any upload fails', async () => {
       let call = 0;
       cloudinaryMocks.uploadStream.mockImplementation(
@@ -360,6 +383,28 @@ describe('CloudinaryService', () => {
       await expect(
         service.replaceMany([multerFile(Buffer.from([1]))], ['a', 'b']),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws when file count exceeds max_upload_files', async () => {
+      const module = await Test.createTestingModule({
+        imports: [
+          CloudinaryModule.forRoot({
+            cloud_name: 'test_cloud',
+            api_key: 'test_key',
+            api_secret: 'test_secret',
+            max_upload_files: 1,
+          }),
+        ],
+      }).compile();
+      const limited = module.get(CloudinaryService);
+
+      await expect(
+        limited.replaceMany(
+          [multerFile(Buffer.from([1])), multerFile(Buffer.from([2]))],
+          ['a', 'b'],
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(cloudinaryMocks.uploadStream).not.toHaveBeenCalled();
     });
 
     it('returns all when each replace succeeds', async () => {
