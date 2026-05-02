@@ -2,6 +2,7 @@ import type {
   CloudinaryFolder,
   CloudinaryUploadSuccess,
 } from './cloudinary-models.interface';
+import type { CloudinaryDeleteSpec } from './cloudinary-delete-spec.interface';
 import type { CloudinaryDeleteBatch } from '../cloudinary-delete-batch';
 
 /**
@@ -30,7 +31,9 @@ export interface CloudinaryServiceContract {
   listSubFolders(parent: string): Promise<CloudinaryFolder[]>;
   renameFolder(from: string, to: string): Promise<{ from: string; to: string }>;
   /**
-   * Queued deletes: call `prepare*` on the batch, then `save()` to execute.
+   * Queued deletes: pass a spec (or array of specs), then save() on the returned batch.
    */
-  createDeleteBatch(): CloudinaryDeleteBatch;
+  delete(
+    specOrSpecs: CloudinaryDeleteSpec | readonly CloudinaryDeleteSpec[],
+  ): CloudinaryDeleteBatch;
 }

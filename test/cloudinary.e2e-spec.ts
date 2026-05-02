@@ -37,4 +37,22 @@ describe('CloudinaryModule (e2e)', () => {
         expect(res.body).toEqual({ injected: true });
       });
   });
+
+  it('GET /cloudinary/delete-batch/empty-save returns empty results', () => {
+    return request(app.getHttpServer())
+      .get('/cloudinary/delete-batch/empty-save')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toEqual({ results: [] });
+      });
+  });
+
+  it('GET /cloudinary/delete-batch/fluent-smoke confirms delete() returns a batch', () => {
+    return request(app.getHttpServer())
+      .get('/cloudinary/delete-batch/fluent-smoke')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toEqual({ isBatch: true });
+      });
+  });
 });

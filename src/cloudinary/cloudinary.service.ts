@@ -19,10 +19,13 @@ import type {
   CloudinaryFolder,
   CloudinaryUploadSuccess,
 } from './interface/cloudinary-models.interface';
+import type {
+  CloudinaryDeleteSpec,
+  DeleteFolderPrepareOptions,
+} from './interface/cloudinary-delete-spec.interface';
 import {
   CloudinaryDeleteBatch,
   type CloudinaryDeleteBatchExecutor,
-  type DeleteFolderPrepareOptions,
 } from './cloudinary-delete-batch';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
@@ -32,6 +35,7 @@ export { v2 as cloudinary } from 'cloudinary';
 
 export type {
   CloudinaryDeleteBatchOpResult,
+  CloudinaryDeleteBatchSaveError,
   CloudinaryDeleteBatchSaveResult,
   CloudinaryDeleteFolderResult,
   CloudinaryDeleteResult,
@@ -39,7 +43,11 @@ export type {
   CloudinaryFolder,
   CloudinaryUploadSuccess,
 } from './interface/cloudinary-models.interface';
-export type { DeleteFolderPrepareOptions } from './cloudinary-delete-batch';
+export type {
+  CloudinaryDeleteSpec,
+  DeleteFolderPrepareOptions,
+} from './interface/cloudinary-delete-spec.interface';
+export type { PreparedDeleteOp } from './cloudinary-delete-batch';
 export { CloudinaryDeleteBatch } from './cloudinary-delete-batch';
 
 function settledReasonMessage(reason: unknown): string {
@@ -298,10 +306,19 @@ export class CloudinaryService implements CloudinaryServiceContract {
   }
 
   /**
-   * Builds a delete batch: `prepare*` methods only queue work; {@link CloudinaryDeleteBatch.save}
-   * executes Cloudinary calls in order. Use one batch per HTTP request.
+   * Queues delete work; nothing hits Cloudinary until {@link CloudinaryDeleteBatch.save}.
+   * Example: `await this.delete({ kind: 'one', publicId: 'pedro' }).save()`.
+   * Pass an array to run several deletes in order on one {@link CloudinaryDeleteBatch.save}.
    */
-  createDeleteBatch(): CloudinaryDeleteBatch {
+  delete(
+    specOrSpecs: CloudinaryDeleteSpec | readonly CloudinaryDeleteSpec[],
+  ): CloudinaryDeleteBatch {
+    const specs: readonly CloudinaryDeleteSpec[] = Array.isArray(specOrSpecs)
+      ? specOrSpecs
+      : [specOrSpecs];
+    const ops: CloudinaryDeleteSpec[] = specs.map((s) =>
+      this.#normalizeDeleteSpec(s),
+    );
     const executor: CloudinaryDeleteBatchExecutor = {
       destroyOne: (id) => this.#destroyOne(id),
       deleteManyImmediate: (ids) => this.#deleteManyImmediate(ids),
@@ -309,7 +326,49 @@ export class CloudinaryService implements CloudinaryServiceContract {
       deleteFolderImmediate: (path, options) =>
         this.#deleteFolderImmediate(path, options),
     };
-    return new CloudinaryDeleteBatch(executor);
+    return new CloudinaryDeleteBatch(executor, ops);
+  }
+
+  #normalizeDeleteSpec(spec: CloudinaryDeleteSpec): CloudinaryDeleteSpec {
+    switch (spec.kind) {
+      case 'one': {
+        const id = spec.publicId?.trim() ?? '';
+        if (!id) {
+          throw new BadRequestException('publicId is required.');
+        }
+        return { kind: 'one', publicId: id };
+      }
+      case 'many': {
+        const publicIds = spec.publicIds;
+        if (!Array.isArray(publicIds) || publicIds.length === 0) {
+          throw new BadRequestException('publicIds must be a non-empty array.');
+        }
+        return { kind: 'many', publicIds: [...publicIds] };
+      }
+      case 'byFolder': {
+        const p = spec.path?.trim() ?? '';
+        if (!p) {
+          throw new BadRequestException('folder prefix is required.');
+        }
+        return { kind: 'byFolder', path: p };
+      }
+      case 'folder': {
+        if (!spec.options.save_deleted) {
+          throw new BadRequestException(
+            'security error: save_deleted is required to save deleted assets.',
+          );
+        }
+        const p = spec.path?.trim() ?? '';
+        if (!p) {
+          throw new BadRequestException('folder path is required.');
+        }
+        return {
+          kind: 'folder',
+          path: p,
+          options: spec.options,
+        };
+      }
+    }
   }
 
   // ─── DELETES (immediate, internal — e.g. upload rollback) ───────────────────

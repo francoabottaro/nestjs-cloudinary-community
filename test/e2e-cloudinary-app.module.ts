@@ -1,6 +1,8 @@
 import { Controller, Get, Module } from '@nestjs/common';
+import { CloudinaryDeleteBatch } from '../src/cloudinary/cloudinary-delete-batch';
 import { CloudinaryModule } from '../src/cloudinary/cloudinary.module';
 import { CloudinaryService } from '../src/cloudinary/cloudinary.service';
+import type { CloudinaryDeleteBatchSaveResult } from '../src/cloudinary/interface/cloudinary-models.interface';
 
 @Controller()
 class CloudinaryE2EProbeController {
@@ -14,6 +16,24 @@ class CloudinaryE2EProbeController {
   @Get('cloudinary/probe')
   probe(): { injected: boolean } {
     return { injected: this.cloudinary !== undefined };
+  }
+
+  /** Exercises {@link CloudinaryService.delete} with an empty queue + {@link CloudinaryDeleteBatch.save}. */
+  @Get('cloudinary/delete-batch/empty-save')
+  async emptyDeleteBatchSave(): Promise<CloudinaryDeleteBatchSaveResult> {
+    return this.cloudinary.delete([]).save();
+  }
+
+  /**
+   * Smoke-test {@link CloudinaryService.delete} returns a batch (no Cloudinary calls until save).
+   */
+  @Get('cloudinary/delete-batch/fluent-smoke')
+  fluentSmoke(): { isBatch: boolean } {
+    const pending = this.cloudinary.delete({
+      kind: 'one',
+      publicId: 'e2e-smoke-id',
+    });
+    return { isBatch: pending instanceof CloudinaryDeleteBatch };
   }
 }
 

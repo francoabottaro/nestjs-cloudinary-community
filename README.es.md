@@ -48,7 +48,7 @@ Este módulo envuelve el SDK oficial [`cloudinary`](https://www.npmjs.com/packag
 | ------------- | -------------------------------------------------------------------------------------------------------------- |
 | Módulo Nest   | `CloudinaryModule`, `CloudinaryService`                                                                        |
 | Tokens DI     | `CLOUDINARY_CLIENT`, `CLOUDINARY_OPTIONS`                                                                      |
-| Borrados      | `CloudinaryDeleteBatch` (vía `createDeleteBatch()`), tipos de resultado del batch                              |
+| Borrados      | `delete()` → `CloudinaryDeleteBatch.save()`, `CloudinaryDeleteSpec`, tipos de resultado del batch              |
 | Controladores | `requireNonEmptyString`, `parsePublicIdsJson`                                                                  |
 | Tipos         | `CloudinaryServiceContract`, interfaces de resultados                                                          |
 | Avanzado      | `cloudinary` — reexport del SDK oficial `v2` (mismo singleton que configura el módulo)                         |
@@ -150,7 +150,7 @@ const result = await cloudinary.uploader.upload('/tmp/archivo.png', {
 
 ### Subclase y `cloudinarySdk`
 
-`CloudinaryService` expone **`protected readonly cloudinarySdk`**, con el mismo tipo que el objeto `v2`. Las subclases pueden agregar métodos que llamen a cualquier API de Cloudinary y seguir usando `uploadOne`, `createDeleteBatch`, etc. de la clase base.
+`CloudinaryService` expone **`protected readonly cloudinarySdk`**, con el mismo tipo que el objeto `v2`. Las subclases pueden agregar métodos que llamen a cualquier API de Cloudinary y seguir usando `uploadOne`, `delete`, etc. de la clase base.
 
 `cloudinarySdk` **no** forma parte de [`CloudinaryServiceContract`](src/cloudinary/interface/cloudinary-service.contract.ts): está pensado solo para extensión por herencia.
 
@@ -205,7 +205,7 @@ export class MediaController {
 
 ### `uploadMany(files, folder?)`
 
-Subidas en paralelo. Si falla algún archivo, se hace rollback de las correctas con un **borrado interno inmediato** sobre sus `id_public` (no es la API pública `createDeleteBatch`) y se lanza `Error` con mensaje tipo `Failed to upload 1 of 2 files`.
+Subidas en paralelo. Si falla algún archivo, se hace rollback de las correctas con un **borrado interno inmediato** sobre sus `id_public` (no es la API pública `delete(...).save()`) y se lanza `Error` con mensaje tipo `Failed to upload 1 of 2 files`.
 
 ```typescript
 import { Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
@@ -258,28 +258,38 @@ async replaceBatch(
 
 ---
 
-## Borrados (preparar, luego save)
+## Borrados (`delete`, luego `save`)
 
-Los borrados son en **dos fases** para que puedas encolar y solo llamar a Cloudinary cuando ejecutes `save()`:
+Los borrados son en **dos fases**: `delete(...)` solo arma un `CloudinaryDeleteBatch` (sin llamar a Cloudinary); `save()` ejecuta el trabajo **en orden**.
 
-1. `createDeleteBatch()` — devuelve un lote (**uno por request**; el servicio suele ser singleton).
-2. `prepareDeleteOne` / `prepareDeleteMany` / `prepareDeleteByFolder` / `prepareDeleteFolder` — **solo encolan** (aún no llaman a Cloudinary).
-3. `save()` — ejecuta las operaciones **en orden**.
+1. `delete(spec)` o `delete([spec, ...])` — valida y encola uno o más [`CloudinaryDeleteSpec`](src/cloudinary/interface/cloudinary-delete-spec.interface.ts) (**un lote por request**; el servicio suele ser singleton).
+2. `save(continueOnError?)` sobre ese lote — ejecuta las llamadas a Cloudinary.
 
-**Por qué:** reduce borrados destructivos accidentales (tenés que armar el lote completo antes de ejecutar) y deja explícitos los flujos de varios pasos.
+Podés pasar un **array vacío** si solo necesitás un `save()` sin operaciones (p. ej. smoke tests).
 
-### `createDeleteBatch()`
+**Por qué:** reduce borrados destructivos accidentales (no corre nada hasta `save()`) y deja explícitos los flujos de varios pasos.
+
+### `delete(spec)` — una operación
 
 ```typescript
-const batch = this.cloudinary.createDeleteBatch();
-
-batch.prepareDeleteOne('folder/a').prepareDeleteMany(['folder/b', 'folder/c']);
-
-const { results } = await batch.save();
+const { results } = await this.cloudinary
+  .delete({ kind: 'one', publicId: 'folder/a' })
+  .save();
 // results: array de { kind: 'one' | 'many' | 'byFolder' | 'folder', ... }
 ```
 
-### `prepareDeleteMany(publicIds)`
+### `delete([...])` — varias operaciones en un `save()`
+
+```typescript
+const { results } = await this.cloudinary
+  .delete([
+    { kind: 'one', publicId: 'folder/a' },
+    { kind: 'many', publicIds: ['folder/b', 'folder/c'] },
+  ])
+  .save();
+```
+
+### `kind: 'many'` (`publicIds`)
 
 Usa `delete_resources` primero; si falla, hace fallback a `destroy` por id. En `save()` el resultado incluye:
 
@@ -295,20 +305,23 @@ Usa `delete_resources` primero; si falla, hace fallback a `destroy` por id. En `
 }
 ```
 
-### `prepareDeleteByFolder(path)`
+### `kind: 'byFolder'` (`path`)
 
 Purga por prefijo (`delete_resources_by_prefix`). **No** llama a `delete_folder`.
 
-### `prepareDeleteFolder(path, { save_deleted: true })`
+### `kind: 'folder'` (`path`, `options`)
 
 Purga por prefijo y luego `delete_folder`. Si `delete_folder` falla tras la purga, `result.folderRemoved` es `false` y hay `reason`.
 
-**Nota de seguridad:** en `prepareDeleteFolder` hace falta `save_deleted: true` (opt-in explícito), alineado con la Admin API de Cloudinary (`save_deleted`).
+**Nota de seguridad:** en `kind: 'folder'` hace falta `save_deleted: true` (opt-in explícito), alineado con la Admin API de Cloudinary (`save_deleted`).
 
 ```typescript
 const { results } = await this.cloudinary
-  .createDeleteBatch()
-  .prepareDeleteFolder('myfolder', { save_deleted: true })
+  .delete({
+    kind: 'folder',
+    path: 'myfolder',
+    options: { save_deleted: true },
+  })
   .save();
 
 const folder = results.find((r) => r.kind === 'folder');
