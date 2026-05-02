@@ -4,6 +4,67 @@
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Real `pino` loads only when `NESTJS_CLOUDINARY_INIT_PINO=1` (e.g. working on this
+ * env init script in the repo: `yarn init:env` / `npm run init:env`). Otherwise a small JSON-line
+ * logger is used so consumers and `npx` never need the pino package.
+ */
+function createPinoCompatibleLogger() {
+  const base = { name: 'nestjs-cloudinary-community' };
+  const levelRank = {
+    trace: 10,
+    debug: 20,
+    info: 30,
+    warn: 40,
+    error: 50,
+    fatal: 60,
+  };
+  const minRank =
+    levelRank[(process.env.LOG_LEVEL || 'info').toLowerCase()] ??
+    levelRank.info;
+
+  function emit(levelNum, obj, msg) {
+    if (levelNum < minRank) return;
+    const line = JSON.stringify({
+      level: levelNum,
+      time: Date.now(),
+      ...base,
+      ...obj,
+      msg,
+    });
+    console.log(line);
+  }
+
+  return {
+    info(obj, msg) {
+      emit(30, obj, msg);
+    },
+    warn(obj, msg) {
+      emit(40, obj, msg);
+    },
+    error(obj, msg) {
+      emit(50, obj, msg);
+    },
+  };
+}
+
+function createLog() {
+  const usePino = process.env.NESTJS_CLOUDINARY_INIT_PINO === '1';
+  if (usePino) {
+    try {
+      return require('pino')({
+        level: process.env.LOG_LEVEL || 'info',
+        base: { name: 'nestjs-cloudinary-community' },
+      });
+    } catch {
+      // pino is devDependency; if missing, fall back without failing the CLI
+    }
+  }
+  return createPinoCompatibleLogger();
+}
+
+const log = createLog();
+
 const KEYS = [
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
@@ -39,8 +100,7 @@ function loadExampleTemplate() {
 # Replace the placeholder values below with your real credentials from:
 # Dashboard → Programmable Media → API Keys → "Cloud name", API Key, and API Secret
 # (use the Programmable Media API key — not an OAuth client id).
-#
-# Never commit a file named .env with real secrets to version control.
+
 
 CLOUDINARY_CLOUD_NAME=${PLACEHOLDERS.CLOUDINARY_CLOUD_NAME}
 CLOUDINARY_API_KEY=${PLACEHOLDERS.CLOUDINARY_API_KEY}
@@ -130,20 +190,45 @@ function mergeEnvWithExample(existingContent, exampleContent, force) {
 function main() {
   const args = parseArgs(process.argv);
   if (args.command !== 'init') {
-    console.error(
-      'Usage: nestjs-cloudinary-community init [--force] [--cwd <path>]',
+    log.error(
+      {
+        event: 'cli_invalid_usage',
+        usage: 'nestjs-cloudinary-community init [--force] [--cwd <path>]',
+      },
+      'invalid or missing subcommand',
     );
     process.exit(1);
   }
 
   const cwd = args.cwd;
+  const envPath = path.join(cwd, '.env');
+  const envTemplatePath = path.join(cwd, '.env.template');
+
+  if (
+    !args.force &&
+    (fs.existsSync(envPath) || fs.existsSync(envTemplatePath))
+  ) {
+    log.warn(
+      {
+        event: 'init_skipped',
+        reason: 'existing_env_files',
+        envPath,
+        envTemplatePath,
+        envExists: fs.existsSync(envPath),
+        envTemplateExists: fs.existsSync(envTemplatePath),
+        cloudinaryPlaceholders: { ...PLACEHOLDERS },
+        cloudinaryEnvLines: KEYS.map((key) => `${key}=${PLACEHOLDERS[key]}`),
+      },
+      'Init was skipped — .env and/or .env.template already exists; add cloudinaryPlaceholders if credentials are missing',
+    );
+    process.exit(0);
+  }
+
   fs.mkdirSync(cwd, { recursive: true });
 
   const exampleContent = loadExampleTemplate();
   const examplePath = path.join(cwd, '.env.example');
   fs.writeFileSync(examplePath, exampleContent, 'utf8');
-
-  const envPath = path.join(cwd, '.env');
   if (!fs.existsSync(envPath)) {
     fs.writeFileSync(envPath, exampleContent, 'utf8');
   } else {
@@ -155,8 +240,14 @@ function main() {
     );
   }
 
-  console.log(
-    `nestjs-cloudinary-community: wrote ${path.relative(process.cwd(), examplePath)} and ${path.relative(process.cwd(), envPath)}. Replace empty values or placeholders for: ${KEYS.join(', ')}.`,
+  log.info(
+    {
+      event: 'init_wrote',
+      examplePath: path.relative(process.cwd(), examplePath),
+      envPath: path.relative(process.cwd(), envPath),
+      keys: KEYS,
+    },
+    'wrote .env.example and .env; replace placeholder values for Cloudinary keys',
   );
 }
 

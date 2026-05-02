@@ -9,6 +9,7 @@
 - [Instalación](#instalación)
 - [Registrar el módulo](#registrar-el-módulo)
 - [Inyectar `CloudinaryService`](#inyectar-cloudinaryservice)
+- [Extender el servicio y el SDK directo](#extender-el-servicio-y-el-sdk-directo)
 - [Subidas](#subidas)
 - [Reemplazo](#reemplazo-mismo-public_id-sobrescribe-el-recurso)
 - [Borrados (preparar, luego save)](#borrados-preparar-luego-save)
@@ -35,7 +36,7 @@ yarn add nestjs-cloudinary-community
 yarn add @nestjs/common @nestjs/core @nestjs/platform-express cloudinary reflect-metadata rxjs
 ```
 
-Este módulo envuelve el SDK oficial [`cloudinary`](https://www.npmjs.com/package/cloudinary). Podés importar el entry `cloudinary` desde este paquete (re-export de `v2`) si necesitás llamadas directas a la Admin / Upload API fuera de `CloudinaryService` — igual tenés que declarar `cloudinary` como dependencia en tu proyecto.
+Este módulo envuelve el SDK oficial [`cloudinary`](https://www.npmjs.com/package/cloudinary). La entrada `v2` se reexporta desde este paquete como **`cloudinary`** (vía `cloudinary.service.ts` y la raíz del paquete) para poder usar `uploader` / `api` directamente cuando haga falta. Igual tenés que declarar **`cloudinary`** como dependencia en tu proyecto (peer dependency).
 
 **Variables de entorno:** `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (nombres oficiales de Cloudinary). Opcional: `CLOUDINARY_FOLDER_ROOT` (`folder_root`), `CLOUDINARY_MAX_UPLOAD_FILES` (`max_upload_files`, entero positivo — tope de archivos por lote en `uploadMany` / `replaceMany`).
 
@@ -43,14 +44,15 @@ Este módulo envuelve el SDK oficial [`cloudinary`](https://www.npmjs.com/packag
 
 ### Superficie pública
 
-| Área          | Símbolos                                                                          |
-| ------------- | --------------------------------------------------------------------------------- |
-| Módulo Nest   | `CloudinaryModule`, `CloudinaryService`                                           |
-| Tokens DI     | `CLOUDINARY_CLIENT`, `CLOUDINARY_OPTIONS`                                         |
-| Borrados      | `CloudinaryDeleteBatch` (vía `createDeleteBatch()`), tipos de resultado del batch |
-| Controladores | `requireNonEmptyString`, `parsePublicIdsJson`                                     |
-| Tipos         | `CloudinaryServiceContract`, interfaces de resultados                             |
-| Avanzado      | `cloudinary` — re-export del SDK oficial (`v2`) para uso directo de la API        |
+| Área          | Símbolos                                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| Módulo Nest   | `CloudinaryModule`, `CloudinaryService`                                                                        |
+| Tokens DI     | `CLOUDINARY_CLIENT`, `CLOUDINARY_OPTIONS`                                                                      |
+| Borrados      | `CloudinaryDeleteBatch` (vía `createDeleteBatch()`), tipos de resultado del batch                              |
+| Controladores | `requireNonEmptyString`, `parsePublicIdsJson`                                                                  |
+| Tipos         | `CloudinaryServiceContract`, interfaces de resultados                                                          |
+| Avanzado      | `cloudinary` — reexport del SDK oficial `v2` (mismo singleton que configura el módulo)                         |
+| Extensión     | `CloudinaryService` → **`cloudinarySdk`** (`protected`) para subclases; no está en `CloudinaryServiceContract` |
 
 ## Registrar el módulo
 
@@ -128,6 +130,44 @@ async replaceBatch(
   return this.cloudinary.replaceMany(files, publicIds);
 }
 ```
+
+## Extender el servicio y el SDK directo
+
+Cuando arranca `CloudinaryModule`, llama a `cloudinary.config(...)` sobre el SDK oficial de Node. Cada import de **`cloudinary`** desde este paquete y cada uso de **`this.cloudinarySdk`** en una subclase apunta al **mismo singleton ya configurado**, no a otro cliente.
+
+### Importar `cloudinary` desde el paquete
+
+Sirve en cualquier servicio, job o script que **no** herede de `CloudinaryService`, cuando necesites una API que la clase base no envuelve (por ejemplo `uploader.upload` con ruta local, u operaciones de Admin API).
+
+```typescript
+import { cloudinary } from 'nestjs-cloudinary-community';
+
+// Después de que tu app haya inicializado CloudinaryModule
+const result = await cloudinary.uploader.upload('/tmp/archivo.png', {
+  folder: 'imports',
+});
+```
+
+### Subclase y `cloudinarySdk`
+
+`CloudinaryService` expone **`protected readonly cloudinarySdk`**, con el mismo tipo que el objeto `v2`. Las subclases pueden agregar métodos que llamen a cualquier API de Cloudinary y seguir usando `uploadOne`, `createDeleteBatch`, etc. de la clase base.
+
+`cloudinarySdk` **no** forma parte de [`CloudinaryServiceContract`](src/cloudinary/interface/cloudinary-service.contract.ts): está pensado solo para extensión por herencia.
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { CloudinaryService } from 'nestjs-cloudinary-community';
+
+@Injectable()
+export class MediaService extends CloudinaryService {
+  /** Ejemplo: llamada al SDK no envuelta por CloudinaryService */
+  async uploadDesdeRuta(rutaLocal: string, folder: string) {
+    return this.cloudinarySdk.uploader.upload(rutaLocal, { folder });
+  }
+}
+```
+
+Registrá la subclase en un módulo que **`imports: [CloudinaryModule.forRoot(...)]`** (o `forRootAsync`) para que la configuración exista antes de usar el SDK. Podés dar de alta `MediaService` con su propio token, o reemplazar el provider por defecto con `{ provide: CloudinaryService, useClass: MediaService }` si toda la app debe usar tu implementación.
 
 ---
 
@@ -333,14 +373,42 @@ try {
 
 ---
 
-## CLI (`scripts/init.js`)
+## CLI (`nestjs-cloudinary-community` / `scripts/init.js`)
 
-Escribe / fusiona `.env.example` y `.env` con claves `CLOUDINARY_*`:
+El subcomando **`init`** escribe la plantilla **`.env.example`** que trae el paquete y crea o **fusiona** **`.env`** con las claves `CLOUDINARY_*`. El resto de líneas de `.env` se conservan. Los valores `CLOUDINARY_*` existentes se mantienen salvo que uses **`--force`**, que vuelve a poner esas claves en los placeholders documentados antes de fusionar.
+
+Tras **`npm install`** o **`yarn install`**, si falta **`.env.example`** en la raíz del proyecto, el **postinstall** del paquete copia la plantilla allí. **No** crea **`.env`** automáticamente, para que `init` pueda crear o fusionar `.env` sin quedar omitido porque ya existiera un `.env` recién generado.
+
+### Uso
 
 ```bash
 npx nestjs-cloudinary-community init
+npx nestjs-cloudinary-community init --cwd ./apps/api
 npx nestjs-cloudinary-community init --force --cwd ./apps/api
 ```
+
+| Flag           | Significado                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------- |
+| `--cwd <path>` | Directorio de salida (por defecto, el directorio de trabajo actual).                                     |
+| `--force`      | Al fusionar `.env`, restablece `CLOUDINARY_*` a placeholders; además desactiva el «skip» descrito abajo. |
+
+### Si ya existen `.env` o `.env.template`
+
+Si **cualquiera** de los dos archivos existe, **`init` no modifica archivos** (código de salida `0`) y emite un log estructurado (ver siguiente apartado) con las líneas placeholder de Cloudinary por si aún faltan credenciales. Vuelve a ejecutar con **`--force`** para el flujo normal de escritura/fusión.
+
+### Registro (logging)
+
+El CLI imprime **un objeto JSON por línea** (forma similar a Pino: `level`, `time`, `msg`, más campos del evento). La variable **`LOG_LEVEL`** puede ser `trace`, `debug`, `info`, `warn`, `error` o `fatal` para filtrar mensajes del logger integrado (valores desconocidos se tratan como `info`).
+
+Para usar el paquete real **`pino`** mientras desarrollas este script en el repositorio, define **`NESTJS_CLOUDINARY_INIT_PINO=1`** y ten `pino` instalado (en este proyecto está en `devDependencies`). Atajo: **`yarn init:env`** / **`npm run init:env`** ejecuta `init` en la raíz del repo con esa variable.
+
+Salida legible (opcional): canalizar con [pino-pretty](https://github.com/pinojs/pino-pretty), por ejemplo:
+
+```bash
+npx nestjs-cloudinary-community init | npx pino-pretty
+```
+
+El paquete publicado no declara **`dependencies`** de runtime para el CLI, así que `npm install nestjs-cloudinary-community` no instala una pila de logging por ello.
 
 ---
 
@@ -349,6 +417,8 @@ npx nestjs-cloudinary-community init --force --cwd ./apps/api
 ```bash
 yarn install && yarn lint && yarn test && yarn test:e2e && yarn build
 ```
+
+`yarn test` incluye las pruebas del script (`jest.config.scripts.cjs`); usa **`yarn test:scripts`** para ejecutar solo esas.
 
 Contribuir: [Conventional Commits](https://www.conventionalcommits.org/), `yarn lint` y `yarn test` antes de un PR.
 

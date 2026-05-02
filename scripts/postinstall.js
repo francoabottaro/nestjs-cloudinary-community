@@ -18,7 +18,6 @@ const templateCandidates = [
 ];
 const template = templateCandidates.find((p) => fs.existsSync(p));
 const targetExample = path.join(consumerRoot, '.env.example');
-const targetEnv = path.join(consumerRoot, '.env');
 
 if (!template) {
   process.exit(0);
@@ -27,16 +26,6 @@ if (!template) {
 if (!fs.existsSync(targetExample)) {
   fs.copyFileSync(template, targetExample);
   console.log(
-    'nestjs-cloudinary-community: created .env.example. Run `npx nestjs-cloudinary-community init` to refresh and merge into .env.',
-  );
-}
-
-if (!fs.existsSync(targetEnv)) {
-  fs.copyFileSync(
-    fs.existsSync(targetExample) ? targetExample : template,
-    targetEnv,
-  );
-  console.log(
-    'nestjs-cloudinary-community: created .env from .env.example. Fill in CLOUDINARY_* values.',
+    'nestjs-cloudinary-community: created .env.example. Run `npx nestjs-cloudinary-community init` to create or merge .env.',
   );
 }

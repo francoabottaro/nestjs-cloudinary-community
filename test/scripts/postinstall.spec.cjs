@@ -19,7 +19,7 @@ describe('scripts/postinstall.js', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('copies .env.example and .env into INIT_CWD when missing', () => {
+  it('copies .env.example into INIT_CWD when missing (does not create .env)', () => {
     const r = spawnSync(process.execPath, [postinstallScript], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -27,10 +27,9 @@ describe('scripts/postinstall.js', () => {
     });
     expect(r.status).toBe(0);
     expect(fs.existsSync(path.join(tmpDir, '.env.example'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, '.env'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.env'))).toBe(false);
     const example = fs.readFileSync(path.join(tmpDir, '.env.example'), 'utf8');
     expect(example).toContain('CLOUDINARY_CLOUD_NAME');
-    expect(fs.readFileSync(path.join(tmpDir, '.env'), 'utf8')).toBe(example);
   });
 
   it('exits 0 when INIT_CWD equals package root (self-install / dev install)', () => {

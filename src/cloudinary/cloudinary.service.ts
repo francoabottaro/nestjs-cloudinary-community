@@ -27,6 +27,9 @@ import {
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
 
+/** Official Cloudinary Node SDK (`v2`). Same singleton configured by {@link CloudinaryModule}. */
+export { v2 as cloudinary } from 'cloudinary';
+
 export type {
   CloudinaryDeleteBatchOpResult,
   CloudinaryDeleteBatchSaveResult,
@@ -49,6 +52,12 @@ export class CloudinaryService implements CloudinaryServiceContract {
   readonly #logger = new Logger(CloudinaryService.name);
   readonly #defaultUploadFolder: string;
   readonly #maxUploadFiles: number | undefined;
+
+  /**
+   * Configured Cloudinary v2 API (`uploader`, `api`, etc.). Subclasses can call
+   * any SDK method not wrapped by this service.
+   */
+  protected readonly cloudinarySdk: typeof cloudinary = cloudinary;
 
   constructor(
     @Inject(CLOUDINARY_CLIENT) configured: unknown,

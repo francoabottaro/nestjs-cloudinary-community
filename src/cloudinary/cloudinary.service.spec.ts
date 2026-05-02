@@ -7,7 +7,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import type { CloudinaryServiceContract } from './interface/cloudinary-service.contract';
 import { CloudinaryModule } from './cloudinary.module';
-import { CloudinaryService } from './cloudinary.service';
+import { CloudinaryService, cloudinary } from './cloudinary.service';
 
 /** Second argument to Cloudinary `upload_stream` in tests. */
 type UploadStreamCallback = (
@@ -139,6 +139,23 @@ describe('CloudinaryService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('subclasses can use cloudinarySdk (same v2 singleton as re-export)', () => {
+    class ExtendedCloudinaryService extends CloudinaryService {
+      exposeSdk() {
+        return this.cloudinarySdk;
+      }
+    }
+    const ext = new ExtendedCloudinaryService(
+      {},
+      {
+        cloud_name: 'test_cloud',
+        api_key: 'test_key',
+        api_secret: 'test_secret',
+      },
+    );
+    expect(ext.exposeSdk()).toBe(cloudinary);
   });
 
   describe('uploadOne', () => {

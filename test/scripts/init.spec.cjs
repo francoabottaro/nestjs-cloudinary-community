@@ -108,6 +108,48 @@ CLOUDINARY_API_SECRET=old2
       expect(fs.readFileSync(path.join(tmpDir, '.env'), 'utf8')).toBe(ex);
     });
 
+    it('skips init when .env already exists and prints Cloudinary snippet', () => {
+      const envPath = path.join(tmpDir, '.env');
+      fs.writeFileSync(envPath, 'FOO=bar\n', 'utf8');
+      const r = spawnSync(
+        process.execPath,
+        [initScript, 'init', '--cwd', tmpDir],
+        { encoding: 'utf8' },
+      );
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('Init was skipped');
+      expect(r.stdout).toContain('CLOUDINARY_CLOUD_NAME=');
+      expect(fs.readFileSync(envPath, 'utf8')).toBe('FOO=bar\n');
+      expect(fs.existsSync(path.join(tmpDir, '.env.example'))).toBe(false);
+    });
+
+    it('skips init when .env.template already exists', () => {
+      fs.writeFileSync(path.join(tmpDir, '.env.template'), 'X=1\n', 'utf8');
+      const r = spawnSync(
+        process.execPath,
+        [initScript, 'init', '--cwd', tmpDir],
+        { encoding: 'utf8' },
+      );
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('Init was skipped');
+      expect(fs.existsSync(path.join(tmpDir, '.env'))).toBe(false);
+      expect(fs.existsSync(path.join(tmpDir, '.env.example'))).toBe(false);
+    });
+
+    it('runs init with --force when .env exists', () => {
+      fs.writeFileSync(path.join(tmpDir, '.env'), 'FOO=1\n', 'utf8');
+      const r = spawnSync(
+        process.execPath,
+        [initScript, 'init', '--force', '--cwd', tmpDir],
+        { encoding: 'utf8' },
+      );
+      expect(r.status).toBe(0);
+      expect(fs.existsSync(path.join(tmpDir, '.env.example'))).toBe(true);
+      const env = fs.readFileSync(path.join(tmpDir, '.env'), 'utf8');
+      expect(env).toContain('FOO=1');
+      expect(env).toContain('CLOUDINARY_CLOUD_NAME');
+    });
+
     it('exits 1 without init subcommand', () => {
       const r = spawnSync(process.execPath, [initScript], { encoding: 'utf8' });
       expect(r.status).toBe(1);
