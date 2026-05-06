@@ -83,6 +83,12 @@ export class AppModule {}
 CloudinaryModule.forRoot();
 ```
 
+**Feature modules** (same as `forRoot()` with no args; reads from `process.env`)
+
+```typescript
+CloudinaryModule.forFeature();
+```
+
 **Async / global**
 
 ```typescript
@@ -175,7 +181,13 @@ Register the subclass in a module that **`imports: [CloudinaryModule.forRoot(...
 
 ### `uploadOne(file, folder?)`
 
-Second argument is the Cloudinary `folder` option (default `'general'`). Returns `{ url, id_public }`.
+Second argument is the Cloudinary `folder` option. Resolution order is:
+
+- explicit non-blank `folder` argument
+- module `folder_root`
+- `'general'`
+
+Returns `{ url, id_public }`.
 
 ```typescript
 import {
@@ -242,16 +254,20 @@ async replace(
 
 Lengths must match or `BadRequestException`. On partial failure, successful replaces are **not** rolled back; throws `Error` like `Failed to replace 1 of 2 files`.
 
+If you are using `multipart/form-data`, send `publicIds` as a **JSON string** field (because form fields are strings):
+
 ```typescript
 import { Post, UploadedFiles, UseInterceptors, Body } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { parsePublicIdsJson } from 'nestjs-cloudinary-community';
 
 @Post('replace-batch')
 @UseInterceptors(FilesInterceptor('files', 10))
 async replaceBatch(
   @UploadedFiles() files: Express.Multer.File[],
-  @Body('publicIds') publicIds: string[],
+  @Body('publicIds') publicIdsRaw: string,
 ) {
+  const publicIds = parsePublicIdsJson(publicIdsRaw);
   return this.cloudinary.replaceMany(files, publicIds);
 }
 ```
@@ -435,7 +451,7 @@ yarn install && yarn lint && yarn test && yarn test:e2e && yarn build
 
 Contributing: [Conventional Commits](https://www.conventionalcommits.org/), `yarn lint` + `yarn test` before PRs.
 
-Public API types: [`src/cloudinary/cloudinary-service.contract.ts`](src/cloudinary/cloudinary-service.contract.ts).
+Public API types: [`src/cloudinary/interface/cloudinary-service.contract.ts`](src/cloudinary/interface/cloudinary-service.contract.ts).
 
 ---
 

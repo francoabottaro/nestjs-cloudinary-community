@@ -83,6 +83,12 @@ export class AppModule {}
 CloudinaryModule.forRoot();
 ```
 
+**Módulos feature** (igual que `forRoot()` sin args; lee desde `process.env`)
+
+```typescript
+CloudinaryModule.forFeature();
+```
+
 **Asíncrono / global**
 
 ```typescript
@@ -175,7 +181,13 @@ Registrá la subclase en un módulo que **`imports: [CloudinaryModule.forRoot(..
 
 ### `uploadOne(file, folder?)`
 
-El segundo argumento es la opción `folder` de Cloudinary (por defecto `'general'`). Devuelve `{ url, id_public }`.
+El segundo argumento es la opción `folder` de Cloudinary. Orden de resolución:
+
+- `folder` explícito (si no está vacío)
+- `folder_root` del módulo
+- `'general'`
+
+Devuelve `{ url, id_public }`.
 
 ```typescript
 import {
@@ -242,16 +254,20 @@ async replace(
 
 Las longitudes deben coincidir o `BadRequestException`. Si hay fallos parciales, los reemplazos exitosos **no** se revierten; se lanza `Error` tipo `Failed to replace 1 of 2 files`.
 
+Si usás `multipart/form-data`, mandá `publicIds` como un campo string con **JSON** (porque los campos del form son strings):
+
 ```typescript
 import { Post, UploadedFiles, UseInterceptors, Body } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { parsePublicIdsJson } from 'nestjs-cloudinary-community';
 
 @Post('replace-batch')
 @UseInterceptors(FilesInterceptor('files', 10))
 async replaceBatch(
   @UploadedFiles() files: Express.Multer.File[],
-  @Body('publicIds') publicIds: string[],
+  @Body('publicIds') publicIdsRaw: string,
 ) {
+  const publicIds = parsePublicIdsJson(publicIdsRaw);
   return this.cloudinary.replaceMany(files, publicIds);
 }
 ```
@@ -435,7 +451,7 @@ yarn install && yarn lint && yarn test && yarn test:e2e && yarn build
 
 Contribuir: [Conventional Commits](https://www.conventionalcommits.org/), `yarn lint` y `yarn test` antes de un PR.
 
-Tipos de la API pública: [`src/cloudinary/cloudinary-service.contract.ts`](src/cloudinary/cloudinary-service.contract.ts).
+Tipos de la API pública: [`src/cloudinary/interface/cloudinary-service.contract.ts`](src/cloudinary/interface/cloudinary-service.contract.ts).
 
 ---
 
