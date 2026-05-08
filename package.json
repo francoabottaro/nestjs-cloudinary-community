@@ -1,6 +1,6 @@
 {
   "name": "nestjs-cloudinary-community",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Unofficial, community-maintained NestJS module for the Cloudinary service. Not affiliated with Cloudinary Ltd.",
   "author": {
     "name": "francoabottaro",
