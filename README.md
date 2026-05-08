@@ -6,6 +6,7 @@
 
 ## Contents
 
+- [Docs](#docs)
 - [Install](#install)
 - [Register the module](#register-the-module)
 - [Inject `CloudinaryService`](#inject-cloudinaryservice)
@@ -20,6 +21,14 @@
 - [Legal and trademarks](#legal-and-trademarks)
 
 ---
+
+## Docs
+
+More detailed pages:
+
+- Scripts / CLI: [`docs/scripts/scripts.md`](docs/scripts/scripts.md) (Spanish: [`docs/scripts/scripts.es.md`](docs/scripts/scripts.es.md))
+- Tests: [`docs/test/test.e2e.md`](docs/test/test.e2e.md) (Spanish: [`docs/test/test.e2e.es.md`](docs/test/test.e2e.es.md))
+- Source guide: [`docs/src/clodinary.md`](docs/src/clodinary.md) (Spanish: [`docs/src/clodinary.es.md`](docs/src/clodinary.es.md))
 
 ## Install
 
@@ -42,6 +51,14 @@ This module wraps the official [`cloudinary`](https://www.npmjs.com/package/clou
 
 **HTTP helpers** (multipart / JSON form fields): `requireNonEmptyString`, `parsePublicIdsJson` — use them in controllers next to `CloudinaryService`.
 
+### Usage (quick start)
+
+Most apps follow this shape:
+
+- **Module**: configure `CloudinaryModule.forRoot(...)` once (AppModule or global).
+- **Controller**: accept `multipart/form-data` via `FileInterceptor` / `FilesInterceptor`.
+- **Service**: call `cloudinary.uploadOne` / `uploadMany` / `replaceOne` / delete batch.
+
 ### Public surface
 
 | Area        | Symbols                                                                                                    |
@@ -55,6 +72,8 @@ This module wraps the official [`cloudinary`](https://www.npmjs.com/package/clou
 | Extension   | `CloudinaryService` → **`cloudinarySdk`** (`protected`) for subclasses; not on `CloudinaryServiceContract` |
 
 ## Register the module
+
+**Use when:** you want one configured Cloudinary SDK singleton for your whole app (DI + optional direct SDK access).
 
 **Explicit options**
 
@@ -104,6 +123,8 @@ CloudinaryModule.forRootAsync({
 
 ## Inject `CloudinaryService`
 
+**Use when:** you want a simple service API for uploads/replaces/deletes/folders (plus helpers for controllers).
+
 ```typescript
 import { Injectable } from '@nestjs/common';
 import { CloudinaryService } from 'nestjs-cloudinary-community';
@@ -138,6 +159,8 @@ async replaceBatch(
 ```
 
 ## Extend `CloudinaryService` and direct SDK
+
+**Use when:** you need an SDK endpoint not wrapped by `CloudinaryService`, or you want to add project-specific methods.
 
 When `CloudinaryModule` boots, it calls `cloudinary.config(...)` on the official Node SDK. Every import of **`cloudinary`** from this package and every use of **`this.cloudinarySdk`** inside a subclass refers to that **same configured singleton** — not a second client.
 
@@ -178,6 +201,8 @@ Register the subclass in a module that **`imports: [CloudinaryModule.forRoot(...
 ---
 
 ## Uploads
+
+**Use when:** you accept files via NestJS multipart interceptors and want `{ url, id_public }` results.
 
 ### `uploadOne(file, folder?)`
 
@@ -234,6 +259,8 @@ async uploadMany(@UploadedFiles() files: Express.Multer.File[]) {
 
 ## Replace (same `public_id`, overwrite asset)
 
+**Use when:** you need to overwrite an existing Cloudinary asset while keeping its `public_id` stable.
+
 ### `replaceOne(file, publicId)`
 
 ```typescript
@@ -275,6 +302,8 @@ async replaceBatch(
 ---
 
 ## Deletes (`delete`, then `save`)
+
+**Use when:** you want explicit, safe deletes (prepare a batch, then run it with `save()`).
 
 Deletes are **two-phase**: `delete(...)` only builds a `CloudinaryDeleteBatch` (no Cloudinary calls); `save()` runs the work **in order**.
 
@@ -348,6 +377,8 @@ const folder = results.find((r) => r.kind === 'folder');
 
 ## Folders (Admin API)
 
+**Use when:** you want to create/list/rename folders via Cloudinary Admin API (configured credentials required).
+
 ### `createFolder(path)`
 
 ```typescript
@@ -377,6 +408,8 @@ const { from, to } = await this.cloudinary.renameFolder('old/path', 'new/path');
 
 ## Errors (what your app will catch)
 
+**Use when:** you want to know which NestJS exceptions can be thrown from this library so you can handle them.
+
 - **`BadRequestException`** — empty folder paths, `replaceMany` length mismatch, empty file buffer, invalid delete batch prepares, etc.
 - **`ServiceUnavailableException`** — heuristic on message (e.g. 401/403/signature) for upload/replace/folder admin calls.
 - **`HttpException`** — rethrown as-is.
@@ -403,6 +436,8 @@ try {
 ---
 
 ## CLI (`nestjs-cloudinary-community` / `scripts/init.js`)
+
+**Use when:** you want to bootstrap `.env.example` + `.env` Cloudinary variables in a project root (or a `--cwd` target).
 
 The `init` subcommand writes the shipped **`.env.example`** template and creates or **merges** **`.env`** with `CLOUDINARY_*` keys. Lines that are not Cloudinary variables are left in place. Existing `CLOUDINARY_*` values in `.env` are preserved unless you pass **`--force`**, which resets those keys to the documented placeholders before merging.
 
